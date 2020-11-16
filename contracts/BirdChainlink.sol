@@ -11,7 +11,8 @@ contract APIConsumer is ChainlinkClient {
     uint256 private fee;
     
     /**
-    Example Request to save off-chain Bird Rating on-chain using chainlink 
+    Example Request to query and save off-chain bird rating from address (0x6f92a213D338470a3fB9E8543A121ecAA5a9e1fA) on-chain using chainlink 
+    Native BirdOracle to be released soon
      * Network: Kovan
      * Oracle: Chainlink - 0x2f90A6D021db21e1B2A077c5a37B3C7E75D15b7e
      * Job ID: Chainlink - 29fa9aa13bf1468788b7cc4a500a45b8
