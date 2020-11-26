@@ -1,111 +1,146 @@
-pragma solidity >=0.4.21 <0.6.0;
+pragma solidity >=0.4.0 <0.7.0;
 
+ // SPDX-License-Identifier: MIT
 /**
-Credit @pedroduartecosta
-Extended Component: 
-Bird Consensus Rating with 2 Oracles using the off-chain API https://www.bird.money/docs
-Interface to Bird Oracle for toher smart contract 
+Bird On-chain Oracle to confirm rating with 2+ consensus before update using the off-chain API https://www.bird.money/docs
 */
 
 contract BirdOracle {
-  Request[] requests; //list of requests made to the contract
-  uint currentId = 0; //increasing request id
-  uint minQuorum = 2; //minimum number of responses to receive before declaring final result
-  uint totalOracleCount = 2; // Hardcoded oracle count
+  BirdRequest[] onChainRequests; //keep track of list of on-chain requests
+  uint internal minConsensus = 2; //minimum number of consensus before confirmation 
+  uint internal birdNest = 2; // bird consensus count
+  uint internal trackId = 0; //increament id's
 
-  // defines a general api request
-  struct Request {
-    uint id;                            //request id
-    string urlToQuery;                  //API url
-    string attributeToFetch;            //json attribute (key) to retrieve in the response
-    string agreedValue;                 //value from key
-    mapping(uint => string) anwers;     //answers provided by the oracles
-    mapping(address => uint) quorum;    //oracles which will query the answer (1=oracle hasn't voted, 2=oracle has voted)
+    /**
+   * Bird Standard API Request
+   * id: "1"
+   * url: "https://www.bird.money/analytics/address/ethaddress"
+   * key: "bird_rating"
+   * value: "0.4"
+   * response: response from off-chain oracles 
+   * nest: approved off-chain oracles nest/addresses and keep track of vote (1=not voted, 2=voted)
+   */
+  struct BirdRequest {
+    uint id;   
+    string url; 
+    string key; 
+    string value;  
+    mapping(uint => string) response;
+    mapping(address => uint) nest; 
   }
-
-  //event that triggers oracle outside of the blockchain
-  event NewRequest (
+  
+    /**
+   * Bird Standard API Request
+   * Off-Chain-Request from outside the blockchain 
+   */
+  event OffChainRequest (
     uint id,
-    string urlToQuery,
-    string attributeToFetch
+    string url,
+    string key
   );
 
-  //triggered when there's a consensus on the final result
+    /**
+   * To call when there is consensus on final result
+   */
+   
   event UpdatedRequest (
     uint id,
-    string urlToQuery,
-    string attributeToFetch,
-    string agreedValue
+    string url,
+    string key,
+    string value
   );
 
-  function createRequest (
-    string memory _urlToQuery,
-    string memory _attributeToFetch
+  function newChainRequest (
+    string calldata _url,
+    string calldata _key
   )
-  public
+  external   
   {
-    uint lenght = requests.push(Request(currentId, _urlToQuery, _attributeToFetch, ""));
-    Request storage r = requests[lenght-1];
+    uint lenght = onChainRequests.push(BirdRequest(trackId, _url, _key, ""));
+    BirdRequest storage r = onChainRequests[lenght-1];
 
-    // Hardcoded oracles address
-    r.quorum[address(0x6c2339b46F41a06f09CA0051ddAD54D1e582bA77)] = 1;
-    r.quorum[address(0xb5346CF224c02186606e5f89EACC21eC25398077)] = 1;
+    /**
+   * trusted oracles in bird nest
+   */
+    address trustedBird1 = address(0x0000000000000000000000000000000000000001);
+    address trustedBird2 = address(0x0000000000000000000000000000000000000002);
+    
+    /**
+   * track votes
+   */
+    r.nest[trustedBird1] = 1;
+    r.nest[trustedBird2] = 1;
 
-    // launch an event to be detected by oracle outside of blockchain
-    emit NewRequest (
-      currentId,
-      _urlToQuery,
-      _attributeToFetch
+    /**
+   * Off-Chain event trigger
+   */
+    emit OffChainRequest (
+      trackId,
+      _url,
+      _key
     );
 
-    // increase request id
-    currentId++;
+    /**
+   * Off-Chain event trigger
+   */
+    trackId++;
   }
 
   //called by the oracle to record its answer
-  function updateRequest (
+    /**
+   * Off-Chain oracle to update its consensus answer
+   */
+  function updatedChainRequest (
     uint _id,
-    string memory _valueRetrieved
-  ) public {
+    string calldata _valueResponse
+  ) external {
 
-    Request storage currRequest = requests[_id];
+    BirdRequest storage trackRequest = onChainRequests[_id];
 
-    //check if oracle is in the list of trusted oracles
-    //and if the oracle hasn't voted yet
-    if(currRequest.quorum[address(msg.sender)] == 1){
-
-      //marking that this address has voted
-      currRequest.quorum[msg.sender] = 2;
-
-      //iterate through "array" of answers until a position if free and save the retrieved value
+    /**
+   * To confirm an address/oracle is part of the trusted nest and has not voted
+   */
+    if(trackRequest.nest[address(msg.sender)] == 1){
+        
+        /**
+       * change vote value to = 2 from 1
+       */
+      trackRequest.nest[msg.sender] = 2;
+      
+        /**
+       * Loop through responses for empty position, save the response
+       * TODO: refactor
+       */
       uint tmpI = 0;
       bool found = false;
       while(!found) {
-        //find first empty slot
-        if(bytes(currRequest.anwers[tmpI]).length == 0){
+          
+        if(bytes(trackRequest.response[tmpI]).length == 0){
           found = true;
-          currRequest.anwers[tmpI] = _valueRetrieved;
+          trackRequest.response[tmpI] = _valueResponse;
         }
         tmpI++;
       }
 
-      uint currentQuorum = 0;
-
-      //iterate through oracle list and check if enough oracles(minimum quorum)
-      //have voted the same answer has the current one
-      for(uint i = 0; i < totalOracleCount; i++){
-        bytes memory a = bytes(currRequest.anwers[i]);
-        bytes memory b = bytes(_valueRetrieved);
+      uint currentConsensusCount = 0;
+      
+        /**
+       * Loop through list and check if min consensus has been reached
+       */
+      
+      for(uint i = 0; i < birdNest; i++){
+        bytes memory a = bytes(trackRequest.response[i]);
+        bytes memory b = bytes(_valueResponse);
 
         if(keccak256(a) == keccak256(b)){
-          currentQuorum++;
-          if(currentQuorum >= minQuorum){
-            currRequest.agreedValue = _valueRetrieved;
+          currentConsensusCount++;
+          if(currentConsensusCount >= minConsensus){
+            trackRequest.value = _valueResponse;
             emit UpdatedRequest (
-              currRequest.id,
-              currRequest.urlToQuery,
-              currRequest.attributeToFetch,
-              currRequest.agreedValue
+              trackRequest.id,
+              trackRequest.url,
+              trackRequest.key,
+              trackRequest.value
             );
           }
         }
