@@ -50,6 +50,9 @@ contract BirdOracle {
     string value
   );
 
+  // container for the ratings
+  mapping (string => string) ratings;
+
   function newChainRequest (
     string calldata _url,
     string calldata _key
@@ -136,6 +139,12 @@ contract BirdOracle {
           currentConsensusCount++;
           if(currentConsensusCount >= minConsensus){
             trackRequest.value = _valueResponse;
+
+
+            // Save value and user information into the bird rating container
+            ratings[trackRequest.url] = trackRequest.value;
+            
+
             emit UpdatedRequest (
               trackRequest.id,
               trackRequest.url,
@@ -147,4 +156,12 @@ contract BirdOracle {
       }
     }
   }
+
+    /**
+   * access to saved ratings after Oracle consensus
+   */
+  function getRating(string memory _url) public view returns (string memory) {
+        return ratings[_url];
+  }
+
 }
